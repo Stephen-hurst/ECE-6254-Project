@@ -1,4 +1,4 @@
-
+# ECE6254 Project - Reinforcement Learning to play Ms Pacman
 import gym
 import tensorflow as tf
 import numpy as np
@@ -91,9 +91,8 @@ for state in range(1024):
     else:
         Q[state,0] = 1
         Q[state,1] = -1
-    
-    
-    
+        
+
     
 
 for e_i in range(num_episodes):
@@ -112,3 +111,7 @@ for e_i in range(num_episodes):
         state = s1
     #if(not np.isclose(reward, 0.0)):
     #    print('Final reward: %f' % reward)
+
+print('Mean reward per game for random agent: %f' % np.mean([play_random(env) for i in range(10000)]))
+print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(10000)]))
+print('Mean reward for play with ideal strategy agent: %f' % np.mean([play(env, Q_ideal) for i in range(10000)]))
