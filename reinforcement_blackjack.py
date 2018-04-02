@@ -4,10 +4,10 @@ import tensorflow as tf
 import numpy as np
 
 ## Set Parameters
-lr = 0.8
+lr = 0.1
 y = 0.99  # gamma: discount on future rewards
-num_episodes = 4000  # number of episodes (complete plays) we should do
-eps = np.log(0.1)/num_episodes  # change of random exploration vs. choosing best policy
+num_episodes = 200000  # number of episodes (complete plays) we should do
+eps = 0.05  # change of random exploration vs. choosing best policy
 
 ## Initialize environment and variables
 # create OpenAI gym environment
@@ -28,7 +28,10 @@ def play(env, Q):
     total_reward = 0
     done = False
     while(done is False):
-        action = Q[state,:].argmax()
+        action = Q[tuple_to_int(s),:].argmax()
+        # debug
+        if(action != ideal_strategy(s[0], s[1], s[2])):
+            pass
         s1, reward, done, _ = env.step(action)
         total_reward += reward
         s = s1
@@ -80,38 +83,62 @@ def ideal_strategy(player, dealer, ace_11):
                 return 1
         else:
             return 0
-    
+            
+def play_ideal_strategy(env):
+    '''Play a game using ideal strategy'''
+    s = env.reset()
+    s1 = s
+    reward = 0
+    total_reward = 0
+    done = False
+    while(done is False):
+        action = ideal_strategy(s[0], s[1], s[2])
+        s1, reward, done, _ = env.step(action)
+        total_reward += reward
+        s = s1
+    return total_reward
+
 # fill in ideal Q
 Q_ideal = np.zeros((1024,2))
 for state in range(1024):
+    if(state == 500):
+        pass
     player, dealer, ace = int_to_tuple(state)
     if(ideal_strategy(player, dealer, ace) == 1):
-        Q[state,0] = -1
-        Q[state,1] = 1
+        Q_ideal[state, 0] = -1
+        Q_ideal[state,1] = 1
     else:
-        Q[state,0] = 1
-        Q[state,1] = -1
+        Q_ideal[state,0] = 1
+        Q_ideal[state,1] = -1
         
-
     
-
+## Q function implemented as a table (actually a dictionary)
 for e_i in range(num_episodes):
     # play through one game, updating the Q table at each step
-    state = tuple_to_int(env.reset())
+    state = env.reset()
     done = False
     reward = 0
     while(done is False):
         # pick an action
-        action = Q[state,:].argmax()
-        if(np.random.random() < np.exp(-e_i*eps)):
+        action = Q[tuple_to_int(state),:].argmax()
+        #if(np.random.random() < np.exp(-e_i*eps)):
+        if(np.random.random() < eps):
+            #action = np.random.randint(0, env.action_space.n-1)
             action = env.action_space.sample()
         s1, reward, done, _ = env.step(action)
-        s1 = tuple_to_int(s1)
-        Q[state, action] = Q[state, action] + lr*(reward + y*np.max(Q[s1, :]) - Q[state,action])
+        if(done is True):
+            Q[tuple_to_int(state), action] = (1-lr)*Q[tuple_to_int(state), action] + lr*reward
+        else:
+            Q[tuple_to_int(state), action] = (1-lr)*Q[tuple_to_int(state), action] + lr*(reward + y*np.max(Q[tuple_to_int(s1), :]))
         state = s1
     #if(not np.isclose(reward, 0.0)):
     #    print('Final reward: %f' % reward)
+    
 
-print('Mean reward per game for random agent: %f' % np.mean([play_random(env) for i in range(10000)]))
-print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(10000)]))
-print('Mean reward for play with ideal strategy agent: %f' % np.mean([play(env, Q_ideal) for i in range(10000)]))
+env.seed(2018)
+print('Mean reward per game for random agent: %f' % np.mean([play_random(env) for i in range(100000)]))
+env.seed(2018)
+print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(100000)]))
+env.seed(2018)
+#print('Mean reward for play with ideal strategy agent: %f' % np.mean([play_ideal_strategy(env) for i in range(10000)]))
+print('Mean reward for play with Q_ideal: %f' % np.mean([play(env, Q_ideal) for i in range(100000)]))
