@@ -5,8 +5,8 @@ import numpy as np
 
 ## Set Parameters
 alpha = 0.01  # determines how fast we update Q, the state-value table
-y = 0.99  # gamma: discount on future rewards
-num_episodes = 200000  # number of episodes (complete games) we should do
+y = 0.95  # gamma: discount on future rewards
+num_episodes = 2000000  # number of episodes (complete games) we should do
 eps = np.log(0.0001)/num_episodes  # chance of random exploration vs. choosing best policy (used in np.exp)
 
 ## Initialize environment and variables
@@ -15,7 +15,8 @@ eps = np.log(0.0001)/num_episodes  # chance of random exploration vs. choosing b
 env = gym.make('Blackjack-v0')
 # create and initialize Q (state-action) table 
 #Q = np.zeros((env.observation_space.n, env.action_space.n))
-Q = np.zeros((1024, 2))
+#Q = np.zeros((1024, 2))
+Q = np.random.random((1024,2))*2 - 1
 
 # Blackjack observations are tuples of (player, dealer, usable_ace)
 # these convert to an int for Q (stored as a matrix) lookup and back
@@ -31,21 +32,6 @@ def play(env, Q):
     done = False
     while(done is False):
         action = Q[tuple_to_int(s),:].argmax()
-        s1, reward, done, _ = env.step(action)
-        total_reward += reward
-        s = s1
-    return total_reward
-    
-    
-def play_random(env):
-    '''Play a game using a random policy and return the reward'''
-    s = env.reset()
-    s1 = s
-    reward = 0
-    total_reward = 0
-    done = False
-    while(done is False):
-        action = env.action_space.sample()
         s1, reward, done, _ = env.step(action)
         total_reward += reward
         s = s1
@@ -109,7 +95,9 @@ for state in range(1024):
     else:
         Q_ideal[state,0] = 1
         Q_ideal[state,1] = -1
-        
+    
+
+print('Mean reward per game for random agent (Q before training): %f' % np.mean([play(env,Q) for i in range(100000)]))
   
 # Train Q, the state-value table by playing a bunch of games and updating
 # Q via the Bellman equation
@@ -141,7 +129,7 @@ for e_i in range(num_episodes):
         state = s1
     
 
-print('Mean reward per game for random agent: %f' % np.mean([play_random(env) for i in range(100000)]))
+#print('Mean reward per game for random agent: %f' % np.mean([play_random(env) for i in range(100000)]))
 print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(100000)]))
 #print('Mean reward for play with ideal strategy agent: %f' % np.mean([play_ideal_strategy(env) for i in range(10000)]))
 print('Mean reward for play with Q_ideal: %f' % np.mean([play(env, Q_ideal) for i in range(100000)]))
