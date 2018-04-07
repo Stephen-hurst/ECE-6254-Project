@@ -4,10 +4,10 @@ import tensorflow as tf
 import numpy as np
 
 ## Set Parameters
-lr = 0.1
+alpha = 0.01  # determines how fast we update Q
 y = 0.99  # gamma: discount on future rewards
-num_episodes = 200000  # number of episodes (complete plays) we should do
-eps = 0.05  # change of random exploration vs. choosing best policy
+num_episodes = 200000  # number of episodes (complete games) we should do
+eps = np.log(0.001)/num_episodes  # chance of random exploration vs. choosing best policy (used in np.exp)
 
 ## Initialize environment and variables
 # create OpenAI gym environment
@@ -112,7 +112,7 @@ for state in range(1024):
         Q_ideal[state,1] = -1
         
     
-## Q function implemented as a table (actually a dictionary)
+## Q function implemented as a table
 for e_i in range(num_episodes):
     # play through one game, updating the Q table at each step
     state = env.reset()
@@ -121,18 +121,26 @@ for e_i in range(num_episodes):
     while(done is False):
         # pick an action
         action = Q[tuple_to_int(state),:].argmax()
-        #if(np.random.random() < np.exp(-e_i*eps)):
-        if(np.random.random() < eps):
+        # use a decaying random exploration rate
+        if(np.random.random() < np.exp(e_i*eps)):
             #action = np.random.randint(0, env.action_space.n-1)
             action = env.action_space.sample()
         s1, reward, done, _ = env.step(action)
+        # Update Q(state,action) (the state-action value function) using an
+        # approximation of the incremental mean function
+        # (see David Silver's lecture 4)
         if(done is True):
-            Q[tuple_to_int(state), action] = (1-lr)*Q[tuple_to_int(state), action] + lr*reward
+            # if this game is over, just count the reward
+            Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward - Q[tuple_to_int(state), action])
         else:
-            Q[tuple_to_int(state), action] = (1-lr)*Q[tuple_to_int(state), action] + lr*(reward + y*np.max(Q[tuple_to_int(s1), :]))
+            # if the game isn't over yet, count the reward plus expected
+            # reward from the next state
+            Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward + y*np.max(Q[tuple_to_int(s1), :]) - Q[tuple_to_int(state), action])
+        # if(done is True):
+        #     Q[tuple_to_int(state), action] = (1-alpha)*Q[tuple_to_int(state), action] + alpha*reward
+        # else:
+        #     Q[tuple_to_int(state), action] = (1-alpha)*Q[tuple_to_int(state), action] + alpha*(reward + y*np.max(Q[tuple_to_int(s1), :]))
         state = s1
-    #if(not np.isclose(reward, 0.0)):
-    #    print('Final reward: %f' % reward)
     
 
 env.seed(2018)
