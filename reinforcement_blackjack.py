@@ -4,10 +4,10 @@ import tensorflow as tf
 import numpy as np
 
 ## Set Parameters
-alpha = 0.01  # determines how fast we update Q
+alpha = 0.01  # determines how fast we update Q, the state-value table
 y = 0.99  # gamma: discount on future rewards
 num_episodes = 200000  # number of episodes (complete games) we should do
-eps = np.log(0.001)/num_episodes  # chance of random exploration vs. choosing best policy (used in np.exp)
+eps = np.log(0.0001)/num_episodes  # chance of random exploration vs. choosing best policy (used in np.exp)
 
 ## Initialize environment and variables
 # create OpenAI gym environment
@@ -17,6 +17,8 @@ env = gym.make('Blackjack-v0')
 #Q = np.zeros((env.observation_space.n, env.action_space.n))
 Q = np.zeros((1024, 2))
 
+# Blackjack observations are tuples of (player, dealer, usable_ace)
+# these convert to an int for Q (stored as a matrix) lookup and back
 tuple_to_int = lambda t: (t[0] << 5) + (t[1] << 1) + int(t[2])
 int_to_tuple = lambda i: ((i >> 5), ((i >> 1) & 0xf), ((i & 1 == 1)))
 
@@ -29,9 +31,6 @@ def play(env, Q):
     done = False
     while(done is False):
         action = Q[tuple_to_int(s),:].argmax()
-        # debug
-        if(action != ideal_strategy(s[0], s[1], s[2])):
-            pass
         s1, reward, done, _ = env.step(action)
         total_reward += reward
         s = s1
@@ -85,7 +84,7 @@ def ideal_strategy(player, dealer, ace_11):
             return 0
             
 def play_ideal_strategy(env):
-    '''Play a game using ideal strategy'''
+    '''Play a game using ideal strategy (obtained from a card bought in Las Vegas)'''
     s = env.reset()
     s1 = s
     reward = 0
@@ -111,8 +110,10 @@ for state in range(1024):
         Q_ideal[state,0] = 1
         Q_ideal[state,1] = -1
         
-    
-## Q function implemented as a table
+  
+# Train Q, the state-value table by playing a bunch of games and updating
+# Q via the Bellman equation
+# Q function is implemented as a matrix
 for e_i in range(num_episodes):
     # play through one game, updating the Q table at each step
     state = env.reset()
@@ -127,26 +128,20 @@ for e_i in range(num_episodes):
             action = env.action_space.sample()
         s1, reward, done, _ = env.step(action)
         # Update Q(state,action) (the state-action value function) using an
-        # approximation of the incremental mean function
-        # (see David Silver's lecture 4)
+        # approximation of the incremental mean function with alpha instead
+        # of 1/N
+        # (see David Silver's RL lecture 4)
         if(done is True):
-            # if this game is over, just count the reward
+            # if this game is over, just count the reward with no next state
             Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward - Q[tuple_to_int(state), action])
         else:
             # if the game isn't over yet, count the reward plus expected
             # reward from the next state
             Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward + y*np.max(Q[tuple_to_int(s1), :]) - Q[tuple_to_int(state), action])
-        # if(done is True):
-        #     Q[tuple_to_int(state), action] = (1-alpha)*Q[tuple_to_int(state), action] + alpha*reward
-        # else:
-        #     Q[tuple_to_int(state), action] = (1-alpha)*Q[tuple_to_int(state), action] + alpha*(reward + y*np.max(Q[tuple_to_int(s1), :]))
         state = s1
     
 
-env.seed(2018)
 print('Mean reward per game for random agent: %f' % np.mean([play_random(env) for i in range(100000)]))
-env.seed(2018)
 print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(100000)]))
-env.seed(2018)
 #print('Mean reward for play with ideal strategy agent: %f' % np.mean([play_ideal_strategy(env) for i in range(10000)]))
 print('Mean reward for play with Q_ideal: %f' % np.mean([play(env, Q_ideal) for i in range(100000)]))
