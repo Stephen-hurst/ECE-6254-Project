@@ -257,7 +257,7 @@ print('Mean reward for play with Q_ideal: %f' % np.mean([play(env, Q_ideal) for 
 # the best we can do with an SVM
 Q_SVM = sklearn.svm.SVR()
 Q_SVM.fit(X, Q.predict(X))
-print('Mean reward for best-fit SVM regression: %f' % np.mean([play(env, Q_SVM) for i in range(100000)]))
+print('Mean reward for best-fit SVM regression (SVR fit to the lookup table): %f' % np.mean([play(env, Q_SVM) for i in range(100000)]))
 
     
 ## Batch training
