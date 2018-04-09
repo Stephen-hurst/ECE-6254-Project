@@ -3,12 +3,14 @@ import gym
 import tensorflow as tf
 import numpy as np
 import sklearn.svm
+import sys
+sys.path.append('ECE-6254-Project')
 from lookup_table import LookupTable
 
 ## Set Parameters
 alpha = 0.01  # determines how fast we update Q, the state-value table
 y = 0.95  # gamma: discount on future rewards
-num_episodes = 200000  # number of episodes (complete games) we should do
+num_episodes = 2000000  # number of episodes (complete games) we should do
 eps = np.log(0.0001)/num_episodes  # chance of random exploration vs. choosing best policy (used in np.exp)
 
 ## Initialize environment and variables
