@@ -165,12 +165,10 @@ def train_Q_incrementally(Q):
             if(done is True):
                 # if this game is over, just count the reward with no next state
                 Q.fit(S_A, Q_S_A + alpha*(reward - Q_S_A))
-                #Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward - Q[tuple_to_int(state), action])
             else:
                 # if the game isn't over yet, count the reward plus expected
                 # reward from the next state
                 Q.fit(S_A, Q_S_A + alpha*(reward + y*best_action_value(Q, S_1, ACTIONS) - Q_S_A))
-                #Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward + y*np.max(Q[tuple_to_int(s1), :]) - Q[tuple_to_int(state), action])
             player, dealer, ace = s1
     return Q
     
@@ -184,12 +182,10 @@ def train_Q_batch(Q):
     # fixed-Q: use a previous version of Q in each batch run
     OBSERVATIONS = 3
     ACTIONS = 2
-    SAMPLES_TO_TRAIN_ON = 1
-    batch_size = 1  # how many games do we play per batch
-    num_batches = 100000
+    SAMPLES_TO_TRAIN_ON = 1000
+    batch_size = 100  # how many games do we play per batch
+    num_batches = 2000
     replay_memory = np.zeros((0, OBSERVATIONS*2+3))  # history of (s, a, r, s') experiences
-    # debug
-    test_Q = np.zeros((1024,2))
     for batch_i in range(num_batches):
         batch_memory = []
         for e_i in range(batch_size):
@@ -210,12 +206,14 @@ def train_Q_batch(Q):
                 s1, r, done, _ = env.step(action)
                 s1_player, s1_dealer, s1_ace = s1
                 batch_memory.append(np.array([player, dealer, ace, action, r, done, s1_player, s1_dealer, s1_ace]))
+                s = s1
         # Update Q using the current replay memory
         replay_memory = np.concatenate((replay_memory, np.array(batch_memory)))
         # Sample from the current replay memory
         # calculate targets using the current Q and use those targets to re-train Q
-        #X_sample = replay_memory[np.random.choice(replay_memory.shape[0], size=min([replay_memory.shape[0], SAMPLES_TO_TRAIN_ON]), replace=False),:]
-        X_sample = replay_memory[-1:,:]
+        X_sample = replay_memory[np.random.choice(replay_memory.shape[0], size=min([replay_memory.shape[0], SAMPLES_TO_TRAIN_ON]), replace=False),:]
+        # # use the last batch of episodes
+        # X_sample = np.array(batch_memory)
         # S,A (state we were in and action we took when we made this observation)
         S_A = X_sample[:,0:(OBSERVATIONS+1)] 
         # S' (state we moved to next)
@@ -234,26 +232,13 @@ def train_Q_batch(Q):
         done_column = X_sample[:,OBSERVATIONS+2]
         max_a_s1 = (1-done_column)*np.max(all_action_values, 1)        
         # training values are the TD-targets
-        y_train = Q.predict(S_A) + alpha*(reward_column + y*max_a_s1 - Q.predict(S_A))
+        Q_predict = Q.predict(S_A)
+        y_train = Q_predict + alpha*(reward_column + y*max_a_s1 - Q_predict)
         Q.fit(S_A, y_train)
-        # debug
-        state = (int(S_A[0,0]), int(S_A[0,1]), int(S_A[0,2]))
-        action = int(S_A[0,3])
-        done = (done_column[0] == 1.0)
-        reward = reward_column[0]
-        if(done == True):
-            # if this game is over, just count the reward with no next state
-            test_Q[tuple_to_int(state), action] = test_Q[tuple_to_int(state), action] + alpha*(reward - test_Q[tuple_to_int(state), action])
-        else:
-            # if the game isn't over yet, count the reward plus expected
-            # reward from the next state
-            test_Q[tuple_to_int(state), action] = test_Q[tuple_to_int(state), action] + alpha*(reward + y*np.max(test_Q[tuple_to_int(s1), :]) - test_Q[tuple_to_int(state), action])
-        if(not np.isclose(test_Q[tuple_to_int(state), action], y_train[0])):
-            print('assertion failed')
-    return (Q, test_Q)
+    return Q
 
 
-# Incremental training using a lookup table
+## Incremental training
 # create and initialize Q (state-action value) function
 Q_random = LookupTable()
 X = []
@@ -275,10 +260,13 @@ Q_SVM.fit(X, Q.predict(X))
 print('Mean reward for best-fit SVM regression: %f' % np.mean([play(env, Q_SVM) for i in range(100000)]))
 
     
-# # Batch training using linear regression
-# # Initialize Q function randomly
-# #Q = sklearn.svm.SVR()
-# Q = LookupTable()
-# Q.fit(np.random.random((1, 4)), np.random.random(1))
-# #(Q, testQ) = train_Q_batch(Q)
-# Q = train_Q_incrementally(Q)
+## Batch training
+# Batch training using lookup table
+Q = LookupTable()
+Q = train_Q_batch(Q)
+print('Mean reward for batch-trained lookup table: %f' % np.mean([play(env, Q) for i in range(100000)]))
+# Batch training using SVR regression
+Q_SVR = sklearn.svm.SVR()
+Q_SVR.fit(np.random.random((1000, 4)), np.random.random(1000))
+Q_SVR = train_Q_batch(Q_SVR)
+print('Mean reward for batch-trained SVR: %f' % np.mean([play(env, Q) for i in range(100000)]))
