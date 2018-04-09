@@ -3,11 +3,12 @@ import gym
 import tensorflow as tf
 import numpy as np
 import sklearn.svm
+from lookup_table import LookupTable
 
 ## Set Parameters
 alpha = 0.01  # determines how fast we update Q, the state-value table
 y = 0.95  # gamma: discount on future rewards
-num_episodes = 2000000  # number of episodes (complete games) we should do
+num_episodes = 200000  # number of episodes (complete games) we should do
 eps = np.log(0.0001)/num_episodes  # chance of random exploration vs. choosing best policy (used in np.exp)
 
 ## Initialize environment and variables
@@ -20,6 +21,40 @@ env = gym.make('Blackjack-v0')
 tuple_to_int = lambda t: (t[0] << 5) + (t[1] << 1) + int(t[2])
 int_to_tuple = lambda i: ((i >> 5), ((i >> 1) & 0xf), ((i & 1 == 1)))
 
+def best_action(Q, X, num_actions):
+    '''Return the best action for a number of states X using policy Q'''
+    # repeat each row of X for every possible action
+    X_repeat = np.repeat(X, num_actions, 0)
+    # add a column for actions
+    X_repeat = np.concatenate((X_repeat, np.zeros((X_repeat.shape[0], 1))), axis=1)
+    # fill in sequential actions
+    X_repeat[:, -1] = np.tile(np.arange(num_actions), X.shape[0])
+    # predict everything
+    predict = Q.predict(X_repeat)
+    # reshape so rows are the original X rows and columns are predictions for 
+    # each action
+    predict = predict.reshape((X.shape[0], num_actions))
+    # return the max action
+    return predict.argmax(axis=1)
+    
+
+def best_action_value(Q, X, num_actions):
+    '''Return the best action value for a number of states X using policy Q'''
+    # repeat each row of X for every possible action
+    X_repeat = np.repeat(X, num_actions, 0)
+    # add a column for actions
+    X_repeat = np.concatenate((X_repeat, np.zeros((X_repeat.shape[0], 1))), axis=1)
+    # fill in sequential actions
+    X_repeat[:, -1] = np.tile(np.arange(num_actions), X.shape[0])
+    # predict everything
+    predict = Q.predict(X_repeat)
+    # reshape so rows are the original X rows and columns are predictions for 
+    # each action
+    predict = predict.reshape((X.shape[0], num_actions))
+    # return the max action
+    return predict.max(axis=1)
+    
+
 def play(env, Q):
     '''Play a game using policy Q and return the reward'''
     s = env.reset()
@@ -28,7 +63,10 @@ def play(env, Q):
     total_reward = 0
     done = False
     while(done is False):
-        action = Q[tuple_to_int(s),:].argmax()
+        if(type(Q) == np.ndarray):
+            action = Q[tuple_to_int(s),:].argmax()
+        else:
+            action = best_action(Q, np.array([[int(s[0]), int(s[1]), int(s[2])]]), env.action_space.n)[0]
         s1, reward, done, _ = env.step(action)
         total_reward += reward
         s = s1
@@ -96,15 +134,19 @@ for state in range(1024):
 def train_Q_incrementally(Q):
     # Train Q, the state-value table by playing a bunch of games and updating
     # Q via the Bellman equation
-    # Q function is implemented as a matrix
+    # Q function is implemented as an arbitrary model with .fit and .predict
+    # functions
+    OBSERVATIONS = 3
+    ACTIONS = 2
+    SAMPLES_TO_TRAIN_ON = 1
     for e_i in range(num_episodes):
         # play through one game, updating the Q table at each step
-        state = env.reset()
+        player, dealer, ace = env.reset()
         done = False
         reward = 0
         while(done is False):
             # pick an action
-            action = Q[tuple_to_int(state),:].argmax()
+            action = best_action(Q, np.array([[player, dealer, ace]]), ACTIONS)[0]
             # use a decaying random exploration rate
             if(np.random.random() < np.exp(e_i*eps)):
                 #action = np.random.randint(0, env.action_space.n-1)
@@ -114,14 +156,20 @@ def train_Q_incrementally(Q):
             # approximation of the incremental mean function with alpha instead
             # of 1/N
             # (see David Silver's RL lecture 4)
+            S_A = np.array([[player, dealer, ace, action]])
+            player1, dealer1, ace1 = s1
+            S_1 = np.array([[player1, dealer1, ace1]])
+            Q_S_A = Q.predict(S_A)
             if(done is True):
                 # if this game is over, just count the reward with no next state
-                Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward - Q[tuple_to_int(state), action])
+                Q.fit(S_A, Q_S_A + alpha*(reward - Q_S_A))
+                #Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward - Q[tuple_to_int(state), action])
             else:
                 # if the game isn't over yet, count the reward plus expected
                 # reward from the next state
-                Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward + y*np.max(Q[tuple_to_int(s1), :]) - Q[tuple_to_int(state), action])
-            state = s1
+                Q.fit(S_A, Q_S_A + alpha*(reward + y*best_action_value(Q, S_1, ACTIONS) - Q_S_A))
+                #Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward + y*np.max(Q[tuple_to_int(s1), :]) - Q[tuple_to_int(state), action])
+            player, dealer, ace = s1
     return Q
     
 def train_Q_batch(Q):
@@ -134,9 +182,12 @@ def train_Q_batch(Q):
     # fixed-Q: use a previous version of Q in each batch run
     OBSERVATIONS = 3
     ACTIONS = 2
-    batch_size = 100 # how many games do we play per batch
-    num_batches = 1000
+    SAMPLES_TO_TRAIN_ON = 1
+    batch_size = 1  # how many games do we play per batch
+    num_batches = 100000
     replay_memory = np.zeros((0, OBSERVATIONS*2+3))  # history of (s, a, r, s') experiences
+    # debug
+    test_Q = np.zeros((1024,2))
     for batch_i in range(num_batches):
         batch_memory = []
         for e_i in range(batch_size):
@@ -161,7 +212,8 @@ def train_Q_batch(Q):
         replay_memory = np.concatenate((replay_memory, np.array(batch_memory)))
         # Sample from the current replay memory
         # calculate targets using the current Q and use those targets to re-train Q
-        X_sample = replay_memory[np.random.choice(replay_memory.shape[0], size=min([replay_memory.shape[0], 1000]), replace=False),:]
+        #X_sample = replay_memory[np.random.choice(replay_memory.shape[0], size=min([replay_memory.shape[0], SAMPLES_TO_TRAIN_ON]), replace=False),:]
+        X_sample = replay_memory[-1:,:]
         # S,A (state we were in and action we took when we made this observation)
         S_A = X_sample[:,0:(OBSERVATIONS+1)] 
         # S' (state we moved to next)
@@ -178,26 +230,53 @@ def train_Q_batch(Q):
         all_action_values = all_action_values.reshape((X_sample.shape[0],ACTIONS), order='F')
         reward_column = X_sample[:,OBSERVATIONS+1]
         done_column = X_sample[:,OBSERVATIONS+2]
-        argmax_s1 = (1-done_column)*np.max(all_action_values, 1)        
+        max_a_s1 = (1-done_column)*np.max(all_action_values, 1)        
         # training values are the TD-targets
-        y_train = alpha*(reward_column + y*argmax_s1 - Q.predict(S_A))
+        y_train = Q.predict(S_A) + alpha*(reward_column + y*max_a_s1 - Q.predict(S_A))
         Q.fit(S_A, y_train)
-        #Q[tuple_to_int(state), action] = Q[tuple_to_int(state), action] + alpha*(reward + y*np.max(Q[tuple_to_int(s1), :]) - Q[tuple_to_int(state), action])
-    return Q
+        # debug
+        state = (int(S_A[0,0]), int(S_A[0,1]), int(S_A[0,2]))
+        action = int(S_A[0,3])
+        done = (done_column[0] == 1.0)
+        reward = reward_column[0]
+        if(done == True):
+            # if this game is over, just count the reward with no next state
+            test_Q[tuple_to_int(state), action] = test_Q[tuple_to_int(state), action] + alpha*(reward - test_Q[tuple_to_int(state), action])
+        else:
+            # if the game isn't over yet, count the reward plus expected
+            # reward from the next state
+            test_Q[tuple_to_int(state), action] = test_Q[tuple_to_int(state), action] + alpha*(reward + y*np.max(test_Q[tuple_to_int(s1), :]) - test_Q[tuple_to_int(state), action])
+        if(not np.isclose(test_Q[tuple_to_int(state), action], y_train[0])):
+            print('assertion failed')
+    return (Q, test_Q)
 
 
 # Incremental training using a lookup table
-# create and initialize Q (state-action) table 
-Q_random = np.random.random((1024,2))*2 - 1
+# create and initialize Q (state-action value) function
+Q_random = LookupTable()
+X = []
+for player in range(2,22):
+    for dealer in range(1,22):
+        for ace in range(2):
+            for action in range(2):
+                X.append([player, dealer, ace, action])
+X = np.array(X)
+Q_random.fit(X, np.random.random(X.shape[0]))
 print('Mean reward per game for random agent (Q before training): %f' % np.mean([play(env,Q_random) for i in range(100000)]))
 Q = train_Q_incrementally(Q_random)
-#print('Mean reward per game for random agent: %f' % np.mean([play_random(env) for i in range(100000)]))
 print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(100000)]))
-#print('Mean reward for play with ideal strategy agent: %f' % np.mean([play_ideal_strategy(env) for i in range(10000)]))
 print('Mean reward for play with Q_ideal: %f' % np.mean([play(env, Q_ideal) for i in range(100000)]))
+# Fit an SVM regression model to the lookup table version of Q to see what's
+# the best we can do with an SVM
+Q_SVM = sklearn.svm.SVR()
+Q_SVM.fit(X, Q.predict(X))
+print('Mean reward for best-fit SVM regression: %f' % np.mean([play(env, Q_SVM) for i in range(100000)]))
 
+    
 # # Batch training using linear regression
 # # Initialize Q function randomly
-# Q = sklearn.svm.SVR()
+# #Q = sklearn.svm.SVR()
+# Q = LookupTable()
 # Q.fit(np.random.random((1, 4)), np.random.random(1))
-# Q = train_Q_batch(Q)
+# #(Q, testQ) = train_Q_batch(Q)
+# Q = train_Q_incrementally(Q)
