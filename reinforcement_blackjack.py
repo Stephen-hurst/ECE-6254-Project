@@ -252,7 +252,7 @@ Q_random.fit(X, np.random.random(X.shape[0]))
 print('Mean reward per game for random agent (Q before training): %f' % np.mean([play(env,Q_random) for i in range(100000)]))
 Q = train_Q_incrementally(Q_random)
 print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(100000)]))
-print('Mean reward for play with Q_ideal: %f' % np.mean([play(env, Q_ideal) for i in range(100000)]))
+print('Mean reward for play with Q_ideal (Vegas blackjack strategy card): %f' % np.mean([play(env, Q_ideal) for i in range(100000)]))
 # Fit an SVM regression model to the lookup table version of Q to see what's
 # the best we can do with an SVM
 Q_SVM = sklearn.svm.SVR()
