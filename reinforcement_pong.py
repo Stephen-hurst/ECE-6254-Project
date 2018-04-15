@@ -31,6 +31,11 @@ def normalize_state(state):
     state -= 128.
     state /= 256.
     return state
+    
+    
+def normalize_reward(reward):
+    '''Normalize a reward directly from OpenAI gym environment'''
+    return reward
 
 
 def best_action(Q, X, num_actions=ACTIONS):
@@ -67,9 +72,10 @@ def best_action_value(Q, X, num_actions=ACTIONS):
     return predict.max(axis=1)
     
 
-def play(env, Q):
+def play(env, Q, render=False):
     '''Play a game using policy Q and return the reward'''
     s = env.reset()
+    s = normalize_state(s)
     s1 = s
     reward = 0
     total_reward = 0
@@ -78,8 +84,11 @@ def play(env, Q):
         if(type(Q) == np.ndarray):
             action = Q[tuple_to_int(s),:].argmax()
         else:
-            action = best_action(Q, np.array([[int(s[0]), int(s[1]), int(s[2])]]), env.action_space.n)[0]
+            action = best_action(Q, s.reshape((1, s.shape[0])))[0]
         s1, reward, done, _ = env.step(action)
+        if(render == True):
+            env.render()
+        s1 = normalize_state(s1)
         total_reward += reward
         s = s1
     return total_reward
@@ -94,29 +103,27 @@ def train_Q_batch(Q):
     # samples from that history
     # fixed-Q: use a previous version of Q in each batch run
     SAMPLES_TO_TRAIN_ON = 1000
-    batch_size = 100  # how many games do we play per batch
-    num_batches = 2000
+    batch_size = 3  # how many games do we play per batch
+    num_batches = 600
     replay_memory = np.zeros((0, OBSERVATIONS*2+3))  # history of (s, a, r, s') experiences
     for batch_i in range(num_batches):
+        print('Batch %d' % batch_i)
         batch_memory = []
         for e_i in range(batch_size):
             s = env.reset()
+            s = normalize_state(s)
             r = 0
             done = False
             while(done is False):
                 # create a matrix with the current state and all actions
-                player, dealer, ace = s
-                all_actions = np.tile(np.array([[player,dealer,ace,0]]), (ACTIONS,1))
-                all_actions[:,-1] = np.arange(ACTIONS)
-                # Choose the action that maximizes value
-                action = Q.predict(all_actions).argmax()
+                action = best_action(Q, s.reshape((1, s.shape[0])))[0]
                 # use a decaying random exploration rate to sometimes try
                 # random actions
-                if(np.random.random() < np.exp(e_i*eps)):
+                if(np.random.random() < np.exp(batch_i*eps)):
                     action = env.action_space.sample()
                 s1, r, done, _ = env.step(action)
-                s1_player, s1_dealer, s1_ace = s1
-                batch_memory.append(np.array([player, dealer, ace, action, r, done, s1_player, s1_dealer, s1_ace]))
+                s1 = normalize_state(s1)
+                batch_memory.append(np.concatenate((s, [action], [r], [done], s1)))
                 s = s1
         # Update Q using the current replay memory
         replay_memory = np.concatenate((replay_memory, np.array(batch_memory)))
@@ -165,31 +172,9 @@ def find_changing_memory_locations(games_to_play=1000):
     return memory_that_changes
         
 
-## Incremental training
-# create and initialize Q (state-action value) function
-Q_random = LookupTable()
-X = []
-for player in range(2,22):
-    for dealer in range(1,22):
-        for ace in range(2):
-            for action in range(2):
-                X.append([player, dealer, ace, action])
-X = np.array(X)
-Q_random.fit(X, np.random.random(X.shape[0]))
-print('Mean reward per game for random agent (Q before training): %f' % np.mean([play(env,Q_random) for i in range(100000)]))
-Q = train_Q_incrementally(Q_random)
-print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(100000)]))
-print('Mean reward for play with Q_ideal (Vegas blackjack strategy card): %f' % np.mean([play(env, Q_ideal) for i in range(100000)]))
-# Fit an SVM regression model to the lookup table version of Q to see what's
-# the best we can do with an SVM
-Q_SVM = sklearn.svm.SVR()
-Q_SVM.fit(X, Q.predict(X))
-print('Mean reward for best-fit SVM regression (SVR fit to the lookup table): %f' % np.mean([play(env, Q_SVM) for i in range(100000)]))
-
-    
 ## Batch training
 # Batch training using SVR regression
 Q_SVR = sklearn.svm.SVR()
-Q_SVR.fit(np.random.random((1000, 4)), np.random.random(1000))
+Q_SVR.fit(np.random.random((1000, OBSERVATIONS+1)), np.random.random(1000))
 Q_SVR = train_Q_batch(Q_SVR)
-print('Mean reward for batch-trained SVR: %f' % np.mean([play(env, Q) for i in range(100000)]))
+#print('Mean reward in Pong for batch-trained SVR: %f' % np.mean([play(env, Q) for i in range(100000)]))
