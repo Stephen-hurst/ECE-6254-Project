@@ -112,7 +112,7 @@ def train_Q_batch(Q):
     replay_memory = np.zeros((0, OBSERVATIONS*2+3))  # history of (s, a, r, s') experiences
     for batch_i in range(num_batches):
         print('Batch %d' % batch_i)
-        def play_a_game(replay_memory_lock):
+        for game_i in range(GAMES_PER_EPISODE):
             '''Play a single game with epsilon-greedy planning and update the replay memory'''
             s = env.reset()
             s = normalize_state(s)
@@ -131,26 +131,15 @@ def train_Q_batch(Q):
                 s1 = normalize_state(s1)
                 r = normalize_reward(r)
                 if(done == True):
-                    r += total_reward
+                    r += total_reward  # add the total score as a big reward if this game is over
                     print('Score: %d' % (total_reward*10))
-                this_experience = np.array([np.concatenate([s1, [action], [reward], [done], s1])])
-                replay_memory_lock.acquire()
+                this_experience = np.array([np.concatenate([s1, [action], [r], [done], s1])])
                 if(replay_memory.shape[0] >= MAX_SAMPLES):
                     replay_memory[np.random.randint(0, MAX_SAMPLES-1),:] = this_experience
                 else:
                     replay_memory = np.concatenate([replay_memory, this_experience])
-                replay_memory_lock.release()
                 s = s1
                 total_reward += r
-        replay_memory_lock = threading.Lock()
-        threads = []
-        for game_i in range(GAMES_PER_EPISODE):
-            # use threading to speed up playing games
-            t = threading.Thread(target=play_a_game, args=[replay_memory_lock])
-            threads.append(t)
-            t.start()
-        for ti in threads:
-            ti.join()
         # Update Q using the current replay memory
         # Sample from the current replay memory
         # calculate targets using the current Q and use those targets to re-train Q
