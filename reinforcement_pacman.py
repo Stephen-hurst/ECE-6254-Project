@@ -20,9 +20,10 @@ env = gym.make('MsPacman-ram-v0')
 memory_that_changes = np.arange(128)
 OBSERVATIONS = memory_that_changes.shape[0]
 ACTIONS = 9  # simplify actions to up, down (==> 2, 5 for Atari Learning Env.)
-MAX_SAMPLES = 2000  # maximum number of state, action, reward, state' samples to store
+MAX_SAMPLES = 6000  # maximum number of state, action, reward, state' samples to store
 GAMES_PER_EPISODE = 3
 NUM_EPISODES = 200000  # number of episodes (e.g., batches of games; anytime we retrain our policy model) we should do
+SAMPLES_TO_TRAIN_ON = 6000  # how many samples from our replay memory should we train Q (our policy) on?
 eps = np.log(0.0001)/NUM_EPISODES  # chance of random exploration vs. choosing best policy (used in np.exp)
 
 
@@ -107,12 +108,12 @@ def train_Q_batch(Q):
     # experience replay: keep a replay history (s, a, r, s') and train using
     # samples from that history
     # fixed-Q: use a previous version of Q in each batch run
-    SAMPLES_TO_TRAIN_ON = 1000
     num_batches = NUM_EPISODES
     replay_memory = np.zeros((0, OBSERVATIONS*2+3))  # history of (s, a, r, s') experiences
     for batch_i in range(num_batches):
         print('Batch %d' % batch_i)
-        for game_i in range(GAMES_PER_EPISODE):
+        def play_a_game(replay_memory_lock):
+            '''Play a single game with epsilon-greedy planning and update the replay memory'''
             s = env.reset()
             s = normalize_state(s)
             r = 0.0
@@ -133,12 +134,23 @@ def train_Q_batch(Q):
                     r += total_reward
                     print('Score: %d' % (total_reward*10))
                 this_experience = np.array([np.concatenate([s1, [action], [reward], [done], s1])])
+                replay_memory_lock.acquire()
                 if(replay_memory.shape[0] >= MAX_SAMPLES):
                     replay_memory[np.random.randint(0, MAX_SAMPLES-1),:] = this_experience
                 else:
                     replay_memory = np.concatenate([replay_memory, this_experience])
+                replay_memory_lock.release()
                 s = s1
                 total_reward += r
+        replay_memory_lock = threading.Lock()
+        threads = []
+        for game_i in range(GAMES_PER_EPISODE):
+            # use threading to speed up playing games
+            t = threading.Thread(target=play_a_game, args=[replay_memory_lock])
+            threads.append(t)
+            t.start()
+        for ti in threads:
+            ti.join()
         # Update Q using the current replay memory
         # Sample from the current replay memory
         # calculate targets using the current Q and use those targets to re-train Q
