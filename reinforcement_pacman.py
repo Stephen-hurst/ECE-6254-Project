@@ -10,9 +10,7 @@ import threading
 
 ## Set Parameters
 alpha = 0.01  # determines how fast we update Q, the state-value table
-y = 0.95  # gamma: discount on future rewards
-num_episodes = 2000000  # number of episodes (complete games) we should do
-eps = np.log(0.0001)/num_episodes  # chance of random exploration vs. choosing best policy (used in np.exp)
+y = 0.99  # gamma: discount on future rewards
 
 ## Initialize environment and variables
 # create OpenAI gym environment
@@ -22,7 +20,10 @@ env = gym.make('MsPacman-ram-v0')
 memory_that_changes = np.arange(128)
 OBSERVATIONS = memory_that_changes.shape[0]
 ACTIONS = 9  # simplify actions to up, down (==> 2, 5 for Atari Learning Env.)
-MAX_SAMPLES = 200000  # maximum number of state, action, reward, state' samples to store
+MAX_SAMPLES = 2000  # maximum number of state, action, reward, state' samples to store
+GAMES_PER_EPISODE = 3
+NUM_EPISODES = 200000  # number of episodes (e.g., batches of games; anytime we retrain our policy model) we should do
+eps = np.log(0.0001)/NUM_EPISODES  # chance of random exploration vs. choosing best policy (used in np.exp)
 
 
 def normalize_state(state):
@@ -107,37 +108,38 @@ def train_Q_batch(Q):
     # samples from that history
     # fixed-Q: use a previous version of Q in each batch run
     SAMPLES_TO_TRAIN_ON = 1000
-    batch_size = 3  # how many games do we play per batch
-    num_batches = 200
+    num_batches = NUM_EPISODES
     replay_memory = np.zeros((0, OBSERVATIONS*2+3))  # history of (s, a, r, s') experiences
     for batch_i in range(num_batches):
         print('Batch %d' % batch_i)
-        batch_memory = []
-        s = env.reset()
-        s = normalize_state(s)
-        r = 0.0
-        total_reward = 0.0
-        done = False
-        while(done is False):
-            # create a matrix with the current state and all actions
-            action = best_action(Q, s.reshape((1, s.shape[0])))[0]
-            # use a decaying random exploration rate to sometimes try
-            # random actions
-            if(np.random.random() < np.exp(batch_i*eps)):
-                action = int(np.random.random() < 0.5)
-            s1, r, done, _ = env.step(action)
-            s1 = normalize_state(s1)
-            r = normalize_reward(r)
-            if(done == True):
-                r += total_reward
-            batch_memory.append(np.concatenate((s, [action], [r], [done], s1)))
-            s = s1
-            total_reward += r
+        for game_i in range(GAMES_PER_EPISODE):
+            s = env.reset()
+            s = normalize_state(s)
+            r = 0.0
+            total_reward = 0.0
+            done = False
+            while(done is False):
+                # create a matrix with the current state and all actions
+                #action = best_action(Q, s.reshape((1, s.shape[0])))[0]
+                action = env.action_space.sample()
+                # use a decaying random exploration rate to sometimes try
+                # random actions
+                if(np.random.random() < np.exp(batch_i*eps)):
+                    action = env.action_space.sample()
+                s1, r, done, _ = env.step(action)
+                s1 = normalize_state(s1)
+                r = normalize_reward(r)
+                if(done == True):
+                    r += total_reward
+                    print('Score: %d' % (total_reward*10))
+                this_experience = np.array([np.concatenate([s1, [action], [reward], [done], s1])])
+                if(replay_memory.shape[0] >= MAX_SAMPLES):
+                    replay_memory[np.random.randint(0, MAX_SAMPLES-1),:] = this_experience
+                else:
+                    replay_memory = np.concatenate([replay_memory, this_experience])
+                s = s1
+                total_reward += r
         # Update Q using the current replay memory
-        batch_memory = np.array(batch_memory)
-        if(replay_memory.shape[0]+batch_memory.shape[0] > MAX_SAMPLES):
-            replay_memory = replay_memory[np.random.choice(replay_memory.shape[0], size=min([replay_memory.shape[0], MAX_SAMPLES-batch_memory.shape[0]]), replace=False),:]
-        replay_memory = np.concatenate((replay_memory, np.array(batch_memory)))
         # Sample from the current replay memory
         # calculate targets using the current Q and use those targets to re-train Q
         X_sample = replay_memory[np.random.choice(replay_memory.shape[0], size=min([replay_memory.shape[0], SAMPLES_TO_TRAIN_ON]), replace=False),:]
@@ -170,13 +172,13 @@ def train_Q_batch(Q):
 def find_changing_memory_locations(games_to_play=1000):
     '''Find memory locations that change by playing a bunch of games and
     looking for memory that changes'''
-    state0 = env.reset()
-    reward = 0.
-    done = False
     
     memory_that_changes = set()
     
     for game_i in range(games_to_play):
+        state0 = env.reset()
+        reward = 0.
+        done = False
         while(done == False):
             state1, reward, done, _ = env.step(env.action_space.sample())
             memory_that_changes = memory_that_changes.union(np.where((state1 - state0) != 0)[0])
