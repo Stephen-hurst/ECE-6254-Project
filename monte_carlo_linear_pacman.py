@@ -1,6 +1,7 @@
 import gym
 import numpy as np
 import sklearn.svm
+import matplotlib.pyplot as plt
 
 env = gym.make('MsPacman-ram-v0')
 import threading
@@ -95,3 +96,16 @@ for e_i in range(1000):
     print('Iteration %d SVR fit score: %f' % (e_i, Q_SVR.score(state_action, reward)))
     print('Iteration %d Mean game score: %f' % (e_i, np.mean(reward)))
     mean_game_scores.append(np.mean(reward))
+
+# Save the mean game scores
+np.savez('mean_game_scores.npz', mean_game_scores)
+
+# Save the Q_SVR fit parameters so we can retrain later
+np.savez('Q_SVR_last_fit.npz', state_action, y_train)
+
+# Plot the convergence (shown by mean game scores)
+plt.plot(mean_game_scores)
+plt.title('Mean game scores')
+plt.xlabel('Training episodes (8 games per episode')
+plt.ylabel('Mean game score over 8 games')
+plt.show()
