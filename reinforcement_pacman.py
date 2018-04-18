@@ -4,9 +4,10 @@ import tensorflow as tf
 import numpy as np
 import sklearn.svm
 import sys
+import threading
 sys.path.append('ECE-6254-Project')
 from lookup_table import LookupTable
-import threading
+from game_history import GameHistory
 
 ## Set Parameters
 alpha = 0.01  # determines how fast we update Q, the state-value table
