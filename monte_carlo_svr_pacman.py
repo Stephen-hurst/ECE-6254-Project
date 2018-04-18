@@ -98,10 +98,10 @@ for e_i in range(1000):
     mean_game_scores.append(np.mean(reward))
 
 # Save the mean game scores
-np.savez('mean_game_scores.npz', mean_game_scores)
+np.savez('mean_game_scores-%d.npz' % MAX_STEPS, mean_game_scores)
 
 # Save the Q_SVR fit parameters so we can retrain later
-np.savez('Q_SVR_last_fit.npz', state_action, y_train)
+np.savez('Q_SVR_last_fit-%d.npz' % MAX_STEPS, state_action, y_train)
 
 # Plot the convergence (shown by mean game scores)
 plt.plot(mean_game_scores)
