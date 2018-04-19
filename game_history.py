@@ -21,7 +21,7 @@ class GameHistory():
             else:
                 rows_to_replace = np.random.choice(self.max_size, samples.shape[0])
                 self._storage[rows_to_replace,:] = samples
-        except e:
+        except Exception as e:
             raise e
         finally:
             self._lock.release()
