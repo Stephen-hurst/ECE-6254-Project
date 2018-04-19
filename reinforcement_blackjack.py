@@ -278,8 +278,17 @@ def train_Q_batch(Q, alpha=1.0):
 # Q = LookupTable()
 # Q = train_Q_batch(Q)
 # print('Mean reward for batch-trained lookup table: %f' % np.mean([play(env, Q) for i in range(100000)]))
-# Batch training using SVR regression
-Q_SVR = sklearn.svm.SVR()
-Q_SVR.fit(np.random.random((1000, 4)), np.random.random(1000))
-Q_SVR = train_Q_batch(Q_SVR)
-print('Mean reward for batch-trained SVR: %f' % np.mean([play(env, Q_SVR) for i in range(100000)]))
+# # Batch training using linear regression
+# Q_linear = sklearn.linear_model.LinearRegression()
+# Q_linear.fit(np.random.random((1000,4)), np.random.random(1000))
+# Q_linear = train_Q_batch(Q_linear)
+# print('Mean reward for batch-trained LR: %f' % np.mean([play(env, Q_linear) for i in range(100000)]))
+# # Batch training using SVR regression
+# Q_SVR = sklearn.svm.SVR()
+# Q_SVR.fit(np.random.random((1000, 4)), np.random.random(1000))
+# Q_SVR = train_Q_batch(Q_SVR)
+# print('Mean reward for batch-trained SVR: %f' % np.mean([play(env, Q_SVR) for i in range(100000)]))
+# Neural net 
+Q_nn = NNPredictor(4)
+Q_nn = train_Q_batch(Q_nn)
+print('Mean reward for batch-trained neural net: %f' % np.mean([play(env, Q_nn) for i in range(100000)]))
