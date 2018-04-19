@@ -14,7 +14,7 @@ from keras.layers import Dense, Activation, Input
 alpha = 0.01  # determines how fast we update Q, the state-value table
 y = 0.95  # gamma: discount on future rewards
 num_episodes = 2000000  # number of episodes (complete games) we should do
-eps = np.log(0.0001)/num_episodes  # chance of random exploration vs. choosing best policy (used in np.exp)
+eps = np.log(0.0001)  # chance of random exploration vs. choosing best policy (used in np.exp)
 
 ## Initialize environment and variables
 # create OpenAI gym environment
@@ -154,7 +154,7 @@ def train_Q_incrementally(Q, plot_every=None):
             # pick an action
             action = best_action(Q, np.array([[player, dealer, ace]]), ACTIONS)[0]
             # use a decaying random exploration rate
-            if(np.random.random() < np.exp(e_i*eps)):
+            if(np.random.random() < np.exp(e_i/num_episodes*eps)):
                 #action = np.random.randint(0, env.action_space.n-1)
                 action = env.action_space.sample()
             s1, reward, done, _ = env.step(action)
@@ -180,7 +180,7 @@ def train_Q_incrementally(Q, plot_every=None):
         plt.plot(np.arange(0, len(mean_scores)*plot_every, plot_every), np.array(mean_scores))
     return Q
     
-def train_Q_batch(Q):
+def train_Q_batch(Q, alpha=1.0):
     '''Train Q using a batch method. Q should already be initialized so
     Q.predict works.'''
     # Train using a batch of several games at once
@@ -195,6 +195,7 @@ def train_Q_batch(Q):
     num_batches = 2000
     replay_memory = np.zeros((0, OBSERVATIONS*2+3))  # history of (s, a, r, s') experiences
     for batch_i in range(num_batches):
+        print('Batch %d' % batch_i)
         batch_memory = []
         for e_i in range(batch_size):
             s = env.reset()
@@ -209,7 +210,7 @@ def train_Q_batch(Q):
                 action = Q.predict(all_actions).argmax()
                 # use a decaying random exploration rate to sometimes try
                 # random actions
-                if(np.random.random() < np.exp(e_i*eps)):
+                if(np.random.random() < np.exp(batch_i/num_batches*eps)):
                     action = env.action_space.sample()
                 s1, r, done, _ = env.step(action)
                 s1_player, s1_dealer, s1_ace = s1
@@ -240,39 +241,43 @@ def train_Q_batch(Q):
         done_column = X_sample[:,OBSERVATIONS+2]
         max_a_s1 = (1-done_column)*np.max(all_action_values, 1)        
         # training values are the TD-targets
-        Q_predict = Q.predict(S_A)
-        y_train = Q_predict + alpha*(reward_column + y*max_a_s1 - Q_predict)
-        Q.fit(S_A, y_train)
+        Q_predict = Q.predict(S_A).reshape(S_A.shape[0],)
+        if('train_on_batch' in dir(Q)):
+            y_train = reward_column + y*max_a_s1
+            Q.train_on_batch(S_A, y_train)
+        else:
+            y_train = Q_predict + alpha*(reward_column + y*max_a_s1 - Q_predict)
+            Q.fit(S_A, y_train)
     return Q
 
 
-## Incremental training
-# create and initialize Q (state-action value) function
-Q_random = LookupTable()
-X = []
-for player in range(2,22):
-    for dealer in range(1,22):
-        for ace in range(2):
-            for action in range(2):
-                X.append([player, dealer, ace, action])
-X = np.array(X)
-Q_random.fit(X, np.random.random(X.shape[0]))
-print('Mean reward per game for random agent (Q before training): %f' % np.mean([play(env,Q_random) for i in range(100000)]))
-Q = train_Q_incrementally(Q_random, plot_every=1000)
-print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(100000)]))
-print('Mean reward for play with Q_ideal (Vegas blackjack strategy card): %f' % np.mean([play(env, Q_ideal) for i in range(100000)]))
-# Fit an SVM regression model to the lookup table version of Q to see what's
-# the best we can do with an SVM
-Q_SVM = sklearn.svm.SVR()
-Q_SVM.fit(X, Q.predict(X))
-print('Mean reward for best-fit SVM regression (SVR fit to the lookup table): %f' % np.mean([play(env, Q_SVM) for i in range(100000)]))
-
-    
-## Batch training
-# Batch training using lookup table
-Q = LookupTable()
-Q = train_Q_batch(Q)
-print('Mean reward for batch-trained lookup table: %f' % np.mean([play(env, Q) for i in range(100000)]))
+# ## Incremental training
+# # create and initialize Q (state-action value) function
+# Q_random = LookupTable()
+# X = []
+# for player in range(2,22):
+#     for dealer in range(1,22):
+#         for ace in range(2):
+#             for action in range(2):
+#                 X.append([player, dealer, ace, action])
+# X = np.array(X)
+# Q_random.fit(X, np.random.random(X.shape[0]))
+# print('Mean reward per game for random agent (Q before training): %f' % np.mean([play(env,Q_random) for i in range(100000)]))
+# Q = train_Q_incrementally(Q_random)
+# print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(100000)]))
+# print('Mean reward for play with Q_ideal (Vegas blackjack strategy card): %f' % np.mean([play(env, Q_ideal) for i in range(100000)]))
+# # Fit an SVM regression model to the lookup table version of Q to see what's
+# # the best we can do with an SVM
+# Q_SVM = sklearn.svm.SVR()
+# Q_SVM.fit(X, Q.predict(X))
+# print('Mean reward for best-fit SVM regression (SVR fit to the lookup table): %f' % np.mean([play(env, Q_SVM) for i in range(100000)]))
+# 
+#     
+# ## Batch training
+# # Batch training using lookup table
+# Q = LookupTable()
+# Q = train_Q_batch(Q)
+# print('Mean reward for batch-trained lookup table: %f' % np.mean([play(env, Q) for i in range(100000)]))
 # Batch training using SVR regression
 Q_SVR = sklearn.svm.SVR()
 Q_SVR.fit(np.random.random((1000, 4)), np.random.random(1000))
