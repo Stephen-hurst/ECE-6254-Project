@@ -277,4 +277,4 @@ print('Mean reward for batch-trained lookup table: %f' % np.mean([play(env, Q) f
 Q_SVR = sklearn.svm.SVR()
 Q_SVR.fit(np.random.random((1000, 4)), np.random.random(1000))
 Q_SVR = train_Q_batch(Q_SVR)
-print('Mean reward for batch-trained SVR: %f' % np.mean([play(env, Q) for i in range(100000)]))
+print('Mean reward for batch-trained SVR: %f' % np.mean([play(env, Q_SVR) for i in range(100000)]))
