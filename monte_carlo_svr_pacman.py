@@ -1,7 +1,7 @@
 import gym
 import numpy as np
 import sklearn.svm
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 env = gym.make('MsPacman-ram-v0')
 import threading
@@ -71,7 +71,7 @@ def play_history(env, Q, eps=1.0, render=False, max_steps=100):
 # Play a bunch of Monte-Carlo batches with 8 games (~5600 action-steps) each
 # Play to a max of 100 steps to figure out the best early-game strategy
 # see if we increase the average game score
-MAX_STEPS = 100
+MAX_STEPS = 500
 game_history = GameHistory(130)
 Q_SVR = sklearn.svm.SVR(kernel='rbf')
 alpha = 0.01  # how fast we update Q, the action-value function
@@ -103,9 +103,9 @@ np.savez('mean_game_scores-%d.npz' % MAX_STEPS, mean_game_scores)
 # Save the Q_SVR fit parameters so we can retrain later
 np.savez('Q_SVR_last_fit-%d.npz' % MAX_STEPS, state_action, y_train)
 
-# Plot the convergence (shown by mean game scores)
-plt.plot(mean_game_scores)
-plt.title('Mean game scores')
-plt.xlabel('Training episodes (8 games per episode')
-plt.ylabel('Mean game score over 8 games')
-plt.show()
+# # Plot the convergence (shown by mean game scores)
+# plt.plot(mean_game_scores)
+# plt.title('Mean game scores')
+# plt.xlabel('Training episodes (8 games per episode')
+# plt.ylabel('Mean game score over 8 games')
+# plt.show()

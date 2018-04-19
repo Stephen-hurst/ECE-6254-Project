@@ -1,3 +1,6 @@
+import threading
+import numpy as np
+
 class GameHistory():
     '''Maintain a history of state-action-value tuples, replacing randomly
     when we exceed the max storage'''

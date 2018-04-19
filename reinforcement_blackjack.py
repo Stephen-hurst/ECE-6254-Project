@@ -2,10 +2,13 @@
 import gym
 import tensorflow as tf
 import numpy as np
+import matplotlib.pyplot as plt
 import sklearn.svm
 import sys
 sys.path.append('ECE-6254-Project')
 from lookup_table import LookupTable
+from keras.models import Sequential
+from keras.layers import Dense, Activation, Input
 
 ## Set Parameters
 alpha = 0.01  # determines how fast we update Q, the state-value table
@@ -133,7 +136,7 @@ for state in range(1024):
         Q_ideal[state,0] = 1
         Q_ideal[state,1] = -1
     
-def train_Q_incrementally(Q):
+def train_Q_incrementally(Q, plot_every=None):
     # Train Q, the state-value table by playing a bunch of games and updating
     # Q via the Bellman equation
     # Q function is implemented as an arbitrary model with .fit and .predict
@@ -141,6 +144,7 @@ def train_Q_incrementally(Q):
     OBSERVATIONS = 3
     ACTIONS = 2
     SAMPLES_TO_TRAIN_ON = 1
+    mean_scores = []  # if plot_every is not None, track and plot performance during training 
     for e_i in range(num_episodes):
         # play through one game, updating the Q table at each step
         player, dealer, ace = env.reset()
@@ -170,6 +174,10 @@ def train_Q_incrementally(Q):
                 # reward from the next state
                 Q.fit(S_A, Q_S_A + alpha*(reward + y*best_action_value(Q, S_1, ACTIONS) - Q_S_A))
             player, dealer, ace = s1
+        if(plot_every != None and (e_i % plot_every) == 0):
+            mean_scores.append(np.mean([play(env, Q) for i in range(10000)]))
+    if(plot_every != None):
+        plt.plot(np.arange(0, len(mean_scores)*plot_every, plot_every), np.array(mean_scores))
     return Q
     
 def train_Q_batch(Q):
@@ -250,7 +258,7 @@ for player in range(2,22):
 X = np.array(X)
 Q_random.fit(X, np.random.random(X.shape[0]))
 print('Mean reward per game for random agent (Q before training): %f' % np.mean([play(env,Q_random) for i in range(100000)]))
-Q = train_Q_incrementally(Q_random)
+Q = train_Q_incrementally(Q_random, plot_every=1000)
 print('Mean reward for game with trained agent: %f' % np.mean([play(env, Q) for i in range(100000)]))
 print('Mean reward for play with Q_ideal (Vegas blackjack strategy card): %f' % np.mean([play(env, Q_ideal) for i in range(100000)]))
 # Fit an SVM regression model to the lookup table version of Q to see what's
